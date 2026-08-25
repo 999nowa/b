@@ -1,10 +1,17 @@
 from pathlib import Path
+import sys
 
-# The workflow copies this script into osmand-source/tools before executing it.
-# Resolve the OsmAnd checkout from the script location rather than from the
-# process working directory.
-repo = Path(__file__).resolve().parents[1]
+# Usage: python3 patches/enable_google_search.py <OsmAnd checkout>
+# Keep this script in the integration repository. Do not copy it into the
+# upstream OsmAnd checkout, because the upstream tree is not required to have
+# an application-local tools/ directory.
+if len(sys.argv) != 2:
+    raise SystemExit("usage: enable_google_search.py <OsmAnd checkout>")
+
+repo = Path(sys.argv[1]).resolve()
 plus = repo / 'OsmAnd/src/net/osmand/plus'
+if not (plus / 'search').is_dir():
+    raise SystemExit(f'Invalid OsmAnd checkout: {plus / "search"} does not exist')
 
 # 1. Register Google Places as an optional OsmAnd search API.
 quick_search = plus / 'search/QuickSearchHelper.java'
@@ -24,13 +31,10 @@ if 'core.registerAPI(new GoogleSearchApi(app));' not in s:
 quick_search.write_text(s, encoding='utf-8')
 
 # 2. Add the API-key field and explicit Google-search switch to OsmAnd's
-#    existing Global Settings screen. These are normal OsmAnd preferences,
-#    not a separate hidden activity.
+# existing Global Settings screen.
 global_xml = repo / 'OsmAnd/res/xml/global_settings.xml'
 x = global_xml.read_text(encoding='utf-8')
 xml_marker = '\t<PreferenceCategory\n\t\tandroid:key="other"'
-xml_insert = '''\t<PreferenceCategory\n\t\tandroid:key="google_maps_integration"\n\t\tandroid:layout="@layout/preference_category_with_descr"\n\t\tandroid:title="Google Maps" />\n\n\t<net.osmand.plus.settings.preferences.EditTextPreferenceEx\n\t\tandroid:key="google_maps_api_key"\n\t\tandroid:layout="@layout/preference_with_descr"\n\t\tandroid:persistent="false"\n\t\tandroid:title="Google Maps API key"\n\t\tandroid:inputType="textVisiblePassword" />\n\n\tnet.osmand.plus.settings.preferences.SwitchPreferenceEx\n'''.replace('\n\t\tnet.osmand', '\n\t<net.osmand')
-# Correctly place the two preferences immediately before the existing Other category.
 if 'android:key="google_maps_api_key"' not in x:
     if xml_marker not in x:
         raise SystemExit('global_settings Other category anchor not found')
@@ -38,7 +42,7 @@ if 'android:key="google_maps_api_key"' not in x:
     x = x.replace(xml_marker, block + xml_marker, 1)
     global_xml.write_text(x, encoding='utf-8')
 
-# 3. Wire those preferences to our private SharedPreferences store.
+# 3. Wire those preferences to our local SharedPreferences stores.
 global_java = plus / 'settings/fragments/GlobalSettingsFragment.java'
 g = global_java.read_text(encoding='utf-8')
 import_marker = 'import net.osmand.plus.settings.backend.ApplicationMode;\n'
