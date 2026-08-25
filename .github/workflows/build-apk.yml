@@ -1,4 +1,4 @@
-name: Build OsmAnd~ Nightly with Google integration
+name: Build OsmAnd Nightly with Google integration
 
 on:
   push:
@@ -12,9 +12,6 @@ env:
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
   JAVA_TOOL_OPTIONS: "-Xmx6g -XX:MaxMetaspaceSize=1g"
 
-authorization:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,35 +23,40 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
-          distribution: temurin
           java-version: '17'
-          cache: ''
+          distribution: 'temurin'
+          cache: gradle
 
       - name: Show available memory
         run: free -h
 
-      - name: Clone OsmAnd Nightly base
+      - name: Clone OsmAnd master for Nightly flavor
         run: |
           set -e
-          git clone --depth 1 --branch nightly https://github.com/osmandapp/OsmAnd.git osmand-source
+          git clone --depth 1 --branch master https://github.com/osmandapp/OsmAnd.git osmand-source
           cd osmand-source
-          echo "OsmAnd commit: $(git rev-parse HEAD)"
+          echo "OsmAnd Nightly source commit: $(git rev-parse HEAD)"
 
       - name: Clone matching OsmAnd resources
-        run: git clone --depth 1 --branch nightly https://github.com/osmandapp/OsmAnd-resources.git resources
+        run: git clone --depth 1 --branch master https://github.com/osmandapp/OsmAnd-resources.git resources
 
       - name: Clone matching OsmAnd build utilities
-        run: git clone --depth 1 --branch nightly https://github.com/osmandapp/OsmAnd-build.git build
+        run: git clone --depth 1 --branch master https://github.com/osmandapp/OsmAnd-build.git build
 
       - name: Clone matching OsmAnd core legacy
-        run: git clone --depth 1 --branch nightly https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
+        run: git clone --depth 1 --branch master https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
 
-      - name: Validate OsmAnd checkout
+      - name: Validate source and dependencies
         run: |
           set -e
           test -f osmand-source/gradlew
           test -d osmand-source/OsmAnd/src/net/osmand/plus
           test -f core-legacy/externals/configure.sh
+          test -f resources/.git/HEAD
+          test -f build/.git/HEAD
+          echo "resources commit: $(git -C resources rev-parse HEAD)"
+          echo "build utilities commit: $(git -C build rev-parse HEAD)"
+          echo "core-legacy commit: $(git -C core-legacy rev-parse HEAD)"
 
       - name: Apply Google integration files
         run: |
@@ -62,9 +64,7 @@ jobs:
           SRC="osmand-source/OsmAnd/src/net/osmand/plus"
           mkdir -p "$SRC/googlemaps"
           cp -R OsmAnd/src/net/osmand/plus/googlemaps/. "$SRC/googlemaps/"
-          mkdir -p "$SRC/search"
           cp OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java "$SRC/search/GoogleSearchSettings.java"
-          mkdir -p osmand-source/tools
           cp patches/enable_google_search.py osmand-source/tools/enable_google_search.py
           python3 osmand-source/tools/enable_google_search.py
 
