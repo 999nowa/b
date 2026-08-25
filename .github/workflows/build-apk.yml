@@ -33,17 +33,21 @@ jobs:
       - name: Clone OsmAnd 5.3 base
         run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd.git osmand-source
 
-      - name: Clone OsmAnd resources
-        run: git clone --depth 1 https://github.com/osmandapp/OsmAnd-resources.git resources
+      - name: Clone matching OsmAnd resources
+        run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd-resources.git resources
 
-      - name: Clone OsmAnd build utilities
-        run: git clone --depth 1 https://github.com/osmandapp/OsmAnd-build.git build
+      - name: Clone matching OsmAnd build utilities
+        run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd-build.git build
+
+      - name: Clone matching OsmAnd core legacy
+        run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
 
       - name: Validate OsmAnd checkout
         run: |
           set -e
           test -f osmand-source/gradlew
           test -d osmand-source/OsmAnd/src/net/osmand/plus
+          test -f core-legacy/externals/configure.sh
 
       - name: Apply Google integration files
         run: |
