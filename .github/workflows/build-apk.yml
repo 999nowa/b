@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+env:
+  GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
+  JAVA_TOOL_OPTIONS: "-Xmx6g -XX:MaxMetaspaceSize=1g"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,6 +26,9 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: ''
+
+      - name: Show available memory
+        run: free -h
 
       - name: Clone OsmAnd source
         run: git clone --depth 1 --branch feature/google-maps-satellite https://github.com/999nowa/OsmAnd.git osmand-source
@@ -48,6 +55,11 @@ jobs:
           cp OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java "$SRC/search/GoogleSearchSettings.java"
           mkdir -p osmand-source/docs
           cp docs/*.md osmand-source/docs/
+
+      - name: Configure Gradle memory
+        working-directory: osmand-source
+        run: |
+          printf '\norg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8\norg.gradle.daemon=false\n' >> gradle.properties
 
       - name: Make Gradle wrapper executable
         working-directory: osmand-source
