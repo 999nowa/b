@@ -1,40 +1,95 @@
 package net.osmand.plus.googlemaps;
 
 import android.content.Context;
-import android.view.View;
-import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
+import org.json.JSONObject;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 
-/** Experimental bridge for a Google Maps satellite map. */
+/**
+ * Google Maps Tile API satellite session and tile URL helper.
+ * This deliberately does not depend on the Google Maps Android SDK.
+ */
 public final class GoogleSatelliteMapController {
-    private static final String MAP_VIEW_CLASS = "com.google.android.gms.maps.MapView";
-    private static final String MAP_OPTIONS_CLASS = "com.google.android.gms.maps.GoogleMapOptions";
-    private static final String MAP_TYPE_SATELLITE = "MAP_TYPE_SATELLITE";
+    private static final String SESSION_ENDPOINT = "https://tile.googleapis.com/v1/createSession";
+    private static final String TILE_ENDPOINT = "https://tile.googleapis.com/v1/2dtiles/";
+
     private GoogleSatelliteMapController() {}
+
     @Nullable
-    public static View createMapView(@NonNull Context context) {
+    public static String createSatelliteSession(@NonNull Context context) {
+        String key = GoogleMapsPreferences.getApiKey(context);
+        if (key.trim().isEmpty()) {
+            return null;
+        }
+        HttpURLConnection connection = null;
         try {
-            Class<?> optionsClass = Class.forName(MAP_OPTIONS_CLASS);
-            Object options = optionsClass.getDeclaredConstructor().newInstance();
-            Method mapType = optionsClass.getMethod("mapType", int.class);
-            mapType.invoke(options, resolveSatelliteType());
-            Class<?> mapViewClass = Class.forName(MAP_VIEW_CLASS);
-            Constructor<?> constructor = mapViewClass.getConstructor(Context.class, optionsClass);
-            return (View) constructor.newInstance(context, options);
-        } catch (Throwable ignored) { return null; }
+            URL url = new URL(SESSION_ENDPOINT + "?key=" + java.net.URLEncoder.encode(key, "UTF-8"));
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+
+            JSONObject request = new JSONObject();
+            request.put("mapType", "satellite");
+            request.put("language", "sv-SE");
+            request.put("region", "SE");
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(request.toString().getBytes(StandardCharsets.UTF_8));
+            }
+
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 200 && status < 300
+                    ? connection.getInputStream() : connection.getErrorStream();
+            String response = read(stream);
+            if (status < 200 || status >= 300) {
+                return null;
+            }
+            return new JSONObject(response).optString("session", null);
+        } catch (Exception ignored) {
+            return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
     }
-    public static boolean attachSatelliteMap(@NonNull FrameLayout container) {
-        View mapView = createMapView(container.getContext());
-        if (mapView == null) return false;
-        container.removeAllViews();
-        container.addView(mapView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        return true;
+
+    @NonNull
+    public static String tileUrl(@NonNull Context context, @NonNull String session, int zoom, int x, int y) {
+        String key = GoogleMapsPreferences.getApiKey(context);
+        return TILE_ENDPOINT + zoom + "/" + x + "/" + y
+                + "?session=" + encode(session) + "&key=" + encode(key);
     }
-    private static int resolveSatelliteType() throws Exception {
-        Class<?> googleMapClass = Class.forName("com.google.android.gms.maps.GoogleMap");
-        return googleMapClass.getField(MAP_TYPE_SATELLITE).getInt(null);
+
+    private static String encode(String value) {
+        try {
+            return java.net.URLEncoder.encode(value, "UTF-8");
+        } catch (Exception e) {
+            return value;
+        }
+    }
+
+    private static String read(InputStream stream) throws Exception {
+        if (stream == null) {
+            return "";
+        }
+        StringBuilder result = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                result.append(line);
+            }
+        }
+        return result.toString();
     }
 }
