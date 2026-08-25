@@ -1,4 +1,4 @@
-name: Build OsmAnd~ 5.3.10 with Google integration
+name: Build OsmAnd~ Nightly with Google integration
 
 on:
   push:
@@ -12,10 +12,13 @@ env:
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
   JAVA_TOOL_OPTIONS: "-Xmx6g -XX:MaxMetaspaceSize=1g"
 
+authorization:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Checkout integration repository
         uses: actions/checkout@v4
@@ -30,17 +33,21 @@ jobs:
       - name: Show available memory
         run: free -h
 
-      - name: Clone OsmAnd 5.3 base
-        run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd.git osmand-source
+      - name: Clone OsmAnd Nightly base
+        run: |
+          set -e
+          git clone --depth 1 --branch nightly https://github.com/osmandapp/OsmAnd.git osmand-source
+          cd osmand-source
+          echo "OsmAnd commit: $(git rev-parse HEAD)"
 
       - name: Clone matching OsmAnd resources
-        run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd-resources.git resources
+        run: git clone --depth 1 --branch nightly https://github.com/osmandapp/OsmAnd-resources.git resources
 
       - name: Clone matching OsmAnd build utilities
-        run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd-build.git build
+        run: git clone --depth 1 --branch nightly https://github.com/osmandapp/OsmAnd-build.git build
 
       - name: Clone matching OsmAnd core legacy
-        run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
+        run: git clone --depth 1 --branch nightly https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
 
       - name: Validate OsmAnd checkout
         run: |
@@ -73,7 +80,11 @@ jobs:
         working-directory: osmand-source
         run: chmod +x gradlew
 
-      - name: Build OsmAnd~ 5.3.10 debug APK
+      - name: Run OsmAnd Java tests
+        working-directory: osmand-source
+        run: ./gradlew :OsmAnd-java:test --no-daemon --stacktrace --max-workers=2
+
+      - name: Build OsmAnd Nightly debug APK
         working-directory: osmand-source
         run: ./gradlew :OsmAnd:assembleNightlyFreeLegacyFatDebug --no-daemon --stacktrace --max-workers=2
 
@@ -84,19 +95,19 @@ jobs:
           test -n "$APK"
           echo "Found APK: $APK"
           mkdir -p app/build/outputs/apk/debug
-          cp "$APK" app/build/outputs/apk/debug/osmand-google-5.3.10.apk
+          cp "$APK" app/build/outputs/apk/debug/osmand-google-nightly.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: osmand-google-5.3.10-apk
-          path: app/build/outputs/apk/debug/osmand-google-5.3.10.apk
+          name: osmand-google-nightly-apk
+          path: app/build/outputs/apk/debug/osmand-google-nightly.apk
           retention-days: 90
 
       - name: Commit APK when below GitHub's 100 MB file limit
         run: |
           set -e
-          APK=app/build/outputs/apk/debug/osmand-google-5.3.10.apk
+          APK=app/build/outputs/apk/debug/osmand-google-nightly.apk
           SIZE=$(stat -c%s "$APK")
           if [ "$SIZE" -ge 104857600 ]; then
             echo "APK is ${SIZE} bytes and exceeds GitHub's 100 MB normal-file limit. Artifact is available instead."
@@ -108,6 +119,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No APK changes to commit."
           else
-            git commit -m "Add OsmAnd 5.3.10 Google integration APK"
+            git commit -m "Build OsmAnd Nightly with Google integration"
             git push origin HEAD:main
           fi
