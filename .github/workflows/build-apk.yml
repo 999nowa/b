@@ -11,6 +11,13 @@ permissions:
 env:
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
   JAVA_TOOL_OPTIONS: "-Xmx6g -XX:MaxMetaspaceSize=1g"
+  OSMAND_COMMIT: "55c111894e88cb7049dd796cc16b3c65fca24693"
+  RESOURCES_COMMIT: "b22e0dfa8b3dbb2bb1c7449062041461033a2739"
+  BUILD_COMMIT: "54356f2a6d1d07fe67510a25ec7912c0c63b277d"
+  CORE_COMMIT: "b67c66154a4fdf09fc84614e3e283d677869329f"
+  CORE_LEGACY_COMMIT: "caedfeac444670f74ea480ebc33083e8b65daf6e"
+  TOOLS_COMMIT: "ebbc3211805d8d66a80663f97e5da6f894ed26e5"
+  MISC_COMMIT: "fa7b6f3c9d4df0007a82f9f575eb1028b8acd52a"
 
 jobs:
   build:
@@ -27,38 +34,72 @@ jobs:
           distribution: 'temurin'
           cache: ''
 
-      - name: Show available memory
-        run: free -h
-
-      - name: Clone OsmAnd master for Nightly flavor
+      - name: Show Java and memory
         run: |
           set -e
-          git clone --depth 1 --branch master https://github.com/osmandapp/OsmAnd.git osmand-source
-          cd osmand-source
-          echo "OsmAnd Nightly source commit: $(git rev-parse HEAD)"
+          java -version
+          free -h
 
-      - name: Clone matching OsmAnd resources
-        run: git clone --depth 1 --branch master https://github.com/osmandapp/OsmAnd-resources.git resources
+      - name: Clone exact OsmAnd Nightly base
+        run: |
+          set -e
+          git clone https://github.com/osmandapp/OsmAnd.git osmand-source
+          git -C osmand-source checkout --detach "$OSMAND_COMMIT"
+          echo "OsmAnd commit: $(git -C osmand-source rev-parse HEAD)"
 
-      - name: Clone matching OsmAnd build utilities
-        run: git clone --depth 1 --branch master https://github.com/osmandapp/OsmAnd-build.git build
+      - name: Clone exact OsmAnd resources
+        run: |
+          set -e
+          git clone https://github.com/osmandapp/OsmAnd-resources.git resources
+          git -C resources checkout --detach "$RESOURCES_COMMIT"
+          echo "resources commit: $(git -C resources rev-parse HEAD)"
 
-      - name: Clone matching OsmAnd core legacy
-        run: git clone --depth 1 --branch master https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
+      - name: Clone exact OsmAnd build utilities
+        run: |
+          set -e
+          git clone https://github.com/osmandapp/OsmAnd-build.git build
+          git -C build checkout --detach "$BUILD_COMMIT"
+          echo "build commit: $(git -C build rev-parse HEAD)"
 
-      - name: Validate source and dependencies
+      - name: Clone exact OsmAnd core
+        run: |
+          set -e
+          git clone https://github.com/osmandapp/OsmAnd-core.git core
+          git -C core checkout --detach "$CORE_COMMIT"
+          echo "core commit: $(git -C core rev-parse HEAD)"
+
+      - name: Clone exact OsmAnd core legacy
+        run: |
+          set -e
+          git clone https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
+          git -C core-legacy checkout --detach "$CORE_LEGACY_COMMIT"
+          echo "core-legacy commit: $(git -C core-legacy rev-parse HEAD)"
+
+      - name: Clone exact OsmAnd tools
+        run: |
+          set -e
+          git clone https://github.com/osmandapp/OsmAnd-tools.git tools
+          git -C tools checkout --detach "$TOOLS_COMMIT"
+          echo "tools commit: $(git -C tools rev-parse HEAD)"
+
+      - name: Clone exact OsmAnd misc
+        run: |
+          set -e
+          git clone https://github.com/osmandapp/OsmAnd-misc.git misc
+          git -C misc checkout --detach "$MISC_COMMIT"
+          echo "misc commit: $(git -C misc rev-parse HEAD)"
+
+      - name: Validate complete upstream build workspace
         run: |
           set -e
           test -f osmand-source/gradlew
           test -d osmand-source/OsmAnd/src/net/osmand/plus
           test -f core-legacy/externals/configure.sh
-          test -f resources/.git/HEAD
-          test -f build/.git/HEAD
-          echo "resources commit: $(git -C resources rev-parse HEAD)"
-          echo "build utilities commit: $(git -C build rev-parse HEAD)"
-          echo "core-legacy commit: $(git -C core-legacy rev-parse HEAD)"
+          test -d core/include
+          test -d tools
+          test -d misc
 
-      - name: Apply Google integration files
+      - name: Apply Google integration
         run: |
           set -e
           SRC="osmand-source/OsmAnd/src/net/osmand/plus"
@@ -68,12 +109,24 @@ jobs:
           cp patches/enable_google_search.py osmand-source/tools/enable_google_search.py
           python3 osmand-source/tools/enable_google_search.py
 
-      - name: Configure Gradle memory and build settings
+      - name: Verify Google patch was applied correctly
+        working-directory: osmand-source
+        run: |
+          set -e
+          grep -q 'GoogleSearchApi' OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java
+          grep -q 'google_maps_api_key' OsmAnd/res/xml/global_settings.xml
+          grep -q 'google_search_enabled' OsmAnd/res/xml/global_settings.xml
+          grep -q 'GoogleMapsPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
+          if grep -R -n 'com.google.android.gms.maps' OsmAnd/src/net/osmand/plus/googlemaps; then
+            echo 'ERROR: obsolete Google Maps Android SDK dependency remains in integration sources'
+            exit 1
+          fi
+
+      - name: Configure Gradle
         working-directory: osmand-source
         run: |
           set -e
           printf '\norg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8\norg.gradle.daemon=false\n' >> gradle.properties
-          java -version
           ./gradlew --version
 
       - name: Make Gradle wrapper executable
@@ -86,16 +139,20 @@ jobs:
 
       - name: Build OsmAnd Nightly debug APK
         working-directory: osmand-source
-        run: ./gradlew :OsmAnd:assembleNightlyFreeLegacyFatDebug --no-daemon --stacktrace --max-workers=2
+        run: ./gradlew assembleNightlyFreeLegacyFatDebug --no-daemon --stacktrace --max-workers=2
 
-      - name: Locate and publish APK
+      - name: Locate and inspect APK
+        working-directory: osmand-source
         run: |
           set -e
-          APK=$(find osmand-source -type f -path '*/build/outputs/apk/*.apk' | head -n 1)
+          APK=$(find OsmAnd/build/outputs/apk -type f -name '*.apk' | head -n 1)
           test -n "$APK"
-          echo "Found APK: $APK"
-          mkdir -p app/build/outputs/apk/debug
-          cp "$APK" app/build/outputs/apk/debug/osmand-google-nightly.apk
+          echo "APK: $APK"
+          mkdir -p ../app/build/outputs/apk/debug
+          cp "$APK" ../app/build/outputs/apk/debug/osmand-google-nightly.apk
+          if command -v aapt >/dev/null 2>&1; then
+            aapt dump badging ../app/build/outputs/apk/debug/osmand-google-nightly.apk | head -n 5
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -110,7 +167,7 @@ jobs:
           APK=app/build/outputs/apk/debug/osmand-google-nightly.apk
           SIZE=$(stat -c%s "$APK")
           if [ "$SIZE" -ge 104857600 ]; then
-            echo "APK is ${SIZE} bytes and exceeds GitHub's 100 MB normal-file limit. Artifact is available instead."
+            echo "APK is ${SIZE} bytes and exceeds GitHub's 100 MB normal-file limit. Artifact remains available."
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -119,6 +176,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No APK changes to commit."
           else
-            git commit -m "Build OsmAnd Nightly with Google integration"
+            git commit -m "Build verified OsmAnd Nightly APK"
             git push origin HEAD:main
           fi
