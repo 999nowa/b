@@ -8,11 +8,14 @@ public final class GoogleSearchPreferences {
     private static final String USE_GOOGLE_SEARCH = "use_google_search";
     private GoogleSearchPreferences() {}
 
+    /** Google search is opt-in. OsmAnd remains the default search provider. */
     public static boolean isGoogleSearchEnabled(@NonNull Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(USE_GOOGLE_SEARCH, true);
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(USE_GOOGLE_SEARCH, false);
     }
 
     public static void setGoogleSearchEnabled(@NonNull Context context, boolean enabled) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(USE_GOOGLE_SEARCH, enabled).apply();
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(USE_GOOGLE_SEARCH, enabled).apply();
     }
 }
