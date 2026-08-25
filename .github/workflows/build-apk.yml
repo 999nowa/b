@@ -53,6 +53,7 @@ jobs:
           cp -R OsmAnd/src/net/osmand/plus/googlemaps/. "$SRC/googlemaps/"
           mkdir -p "$SRC/search"
           cp OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java "$SRC/search/GoogleSearchSettings.java"
+          mkdir -p osmand-source/tools
           cp patches/enable_google_search.py osmand-source/tools/enable_google_search.py
           python3 osmand-source/tools/enable_google_search.py
 
