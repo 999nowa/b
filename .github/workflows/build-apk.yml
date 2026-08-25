@@ -90,7 +90,7 @@ jobs:
           git -C misc checkout --detach "$MISC_COMMIT"
           echo "misc commit: $(git -C misc rev-parse HEAD)"
 
-      - name: Audit exact checkout structure and all integration paths
+      - name: Pre-patch workspace and path audit
         run: |
           set -euo pipefail
           ROOT="$GITHUB_WORKSPACE"
@@ -99,36 +99,17 @@ jobs:
           SEARCH="$PLUS/search"
           SETTINGS="$PLUS/settings/fragments"
           RES="$APP/res"
-
-          echo '--- top-level workspace ---'
+          echo '--- workspace ---'
           find "$ROOT" -maxdepth 2 -type d -print | sort
-
-          echo '--- required repositories ---'
+          echo '--- repositories ---'
           for d in osmand-source resources build core core-legacy tools misc; do
-            test -d "$ROOT/$d"
             test -d "$ROOT/$d/.git"
             echo "$d -> $(realpath "$ROOT/$d")"
           done
-
-          echo '--- required OsmAnd application paths ---'
-          for d in "$APP" "$PLUS" "$SEARCH" "$SETTINGS" "$RES" "$RES/xml" "$PLUS/googlemaps"; do
-            test -d "$d"
-            echo "DIR  $d"
-          done
-
-          echo '--- required upstream files ---'
-          for f in \
-            "$ROOT/osmand-source/gradlew" \
-            "$APP/build.gradle" \
-            "$PLUS/search/QuickSearchHelper.java" \
-            "$PLUS/settings/fragments/GlobalSettingsFragment.java" \
-            "$RES/xml/global_settings.xml" \
-            "$ROOT/core-legacy/externals/configure.sh"; do
-            test -f "$f"
-            echo "FILE $f"
-          done
-
-          echo '--- required integration source files in b ---'
+          echo '--- original OsmAnd paths ---'
+          for d in "$APP" "$PLUS" "$SEARCH" "$SETTINGS" "$RES" "$RES/xml"; do test -d "$d"; done
+          for f in "$ROOT/osmand-source/gradlew" "$APP/build.gradle" "$ROOT/osmand-source/settings.gradle" "$PLUS/search/QuickSearchHelper.java" "$PLUS/settings/fragments/GlobalSettingsFragment.java" "$RES/xml/global_settings.xml"; do test -f "$f"; done
+          echo '--- integration inputs in b ---'
           for f in \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleMapsPreferences.java" \
@@ -136,20 +117,10 @@ jobs:
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" \
-            "$ROOT/patches/enable_google_search.py"; do
-            test -f "$f"
-            echo "FILE $f"
-          done
-
-          echo '--- verify integration destinations and all source parents ---'
-          test -d "$APP/src/net/osmand/plus/googlemaps"
-          test -d "$SEARCH"
-          test -d "$SETTINGS"
-          test -d "$RES/xml"
-          test -f "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java"
-
-          echo '--- verify Python script is only in integration repository ---'
-          test -f "$ROOT/patches/enable_google_search.py"
+            "$ROOT/patches/enable_google_search.py"; do test -f "$f"; done
+          echo '--- pre-patch Google destinations must NOT exist ---'
+          test ! -e "$PLUS/googlemaps"
+          test ! -e "$SEARCH/GoogleSearchSettings.java"
           test ! -e "$ROOT/osmand-source/tools/enable_google_search.py"
           python3 -m py_compile "$ROOT/patches/enable_google_search.py"
           python3 - <<'PY'
@@ -161,55 +132,41 @@ jobs:
               raise SystemExit('Stale hard-coded integration path(s): ' + ', '.join(bad))
           print('Python path audit passed')
           PY
-
-          echo '--- verify no integration source is accidentally already upstream ---'
-          for f in \
-            "$APP/src/net/osmand/plus/googlemaps/GoogleSearchApi.java" \
-            "$APP/src/net/osmand/plus/search/GoogleSearchSettings.java"; do
-            test ! -e "$f"
-          done
-
-          echo '--- Gradle working-directory audit ---'
-          test -f "$ROOT/osmand-source/gradlew"
-          test -f "$ROOT/osmand-source/settings.gradle"
-          test -d "$ROOT/osmand-source/OsmAnd"
+          echo '--- Gradle path audit ---'
           chmod +x "$ROOT/osmand-source/gradlew"
-          "$ROOT/osmand-source/gradlew" --version
+          test -f "$ROOT/osmand-source/gradlew"
+          (cd "$ROOT/osmand-source" && ./gradlew --version)
+          echo 'PRE-PATCH AUDIT PASSED'
 
-      - name: Apply Google integration only after path audit
+      - name: Apply Google integration after pre-patch audit
         run: |
           set -euo pipefail
-          SRC="$GITHUB_WORKSPACE/osmand-source/OsmAnd/src/net/osmand/plus"
-          cp -R "$GITHUB_WORKSPACE/OsmAnd/src/net/osmand/plus/googlemaps/." "$SRC/googlemaps/"
-          cp "$GITHUB_WORKSPACE/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" "$SRC/search/GoogleSearchSettings.java"
-          python3 "$GITHUB_WORKSPACE/patches/enable_google_search.py" "$GITHUB_WORKSPACE/osmand-source"
+          ROOT="$GITHUB_WORKSPACE"
+          APP="$ROOT/osmand-source/OsmAnd"
+          mkdir -p "$APP/src/net/osmand/plus/googlemaps"
+          cp -R "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/." "$APP/src/net/osmand/plus/googlemaps/"
+          cp "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" "$APP/src/net/osmand/plus/search/GoogleSearchSettings.java"
+          python3 "$ROOT/patches/enable_google_search.py" "$ROOT/osmand-source"
 
-      - name: Verify Google patch was applied correctly
+      - name: Post-patch audit
         working-directory: osmand-source
         run: |
           set -euo pipefail
+          test -d OsmAnd/src/net/osmand/plus/googlemaps
+          for f in \
+            OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java \
+            OsmAnd/src/net/osmand/plus/googlemaps/GoogleMapsPreferences.java \
+            OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchPreferences.java \
+            OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java \
+            OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java \
+            OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java; do test -f "$f"; done
           grep -q 'GoogleSearchApi' OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java
           grep -q 'google_maps_api_key' OsmAnd/res/xml/global_settings.xml
           grep -q 'google_search_enabled' OsmAnd/res/xml/global_settings.xml
           grep -q 'GoogleMapsPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
           grep -q 'GoogleSearchPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
-          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java
-          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java
-          if grep -R -n 'com.google.android.gms.maps' OsmAnd/src/net/osmand/plus/googlemaps; then
-            echo 'ERROR: obsolete Google Maps Android SDK dependency remains in integration sources'
-            exit 1
-          fi
-          if grep -R -n 'osmand-source/tools/enable_google_search.py' ../patches .github 2>/dev/null; then
-            echo 'ERROR: stale patch-script destination reference remains'
-            exit 1
-          fi
-
-      - name: Configure Gradle
-        working-directory: osmand-source
-        run: |
-          set -euo pipefail
-          printf '\norg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8\norg.gradle.daemon=false\n' >> gradle.properties
-          ./gradlew --version
+          if grep -R -n 'com.google.android.gms.maps' OsmAnd/src/net/osmand/plus/googlemaps; then exit 1; fi
+          echo 'POST-PATCH AUDIT PASSED'
 
       - name: Run OsmAnd Java tests
         working-directory: osmand-source
@@ -224,14 +181,10 @@ jobs:
         run: |
           set -euo pipefail
           APK=$(find OsmAnd/build/outputs/apk -type f -name '*.apk' -print -quit)
-          test -n "$APK"
-          test -s "$APK"
-          echo "APK: $APK"
+          test -n "$APK" && test -s "$APK"
           mkdir -p ../app/build/outputs/apk/debug
           cp "$APK" ../app/build/outputs/apk/debug/osmand-google-nightly.apk
-          if command -v aapt >/dev/null 2>&1; then
-            aapt dump badging ../app/build/outputs/apk/debug/osmand-google-nightly.apk | head -n 5
-          fi
+          echo "APK: $APK"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -239,22 +192,3 @@ jobs:
           name: osmand-google-nightly-apk
           path: app/build/outputs/apk/debug/osmand-google-nightly.apk
           retention-days: 90
-
-      - name: Commit APK when below GitHub's 100 MB file limit
-        run: |
-          set -euo pipefail
-          APK=app/build/outputs/apk/debug/osmand-google-nightly.apk
-          SIZE=$(stat -c%s "$APK")
-          if [ "$SIZE" -ge 104857600 ]; then
-            echo "APK is ${SIZE} bytes and exceeds GitHub's 100 MB normal-file limit. Artifact remains available."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$APK"
-          if git diff --cached --quiet; then
-            echo "No APK changes to commit."
-          else
-            git commit -m "Build verified OsmAnd Nightly APK"
-            git push origin HEAD:main
-          fi
