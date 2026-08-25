@@ -1,0 +1,73 @@
+name: Build OsmAnd with integration
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout integration repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Clone OsmAnd source
+        run: git clone --depth 1 --branch feature/google-maps-satellite https://github.com/999nowa/OsmAnd.git osmand-source
+
+      - name: Clone OsmAnd resources
+        run: git clone --depth 1 https://github.com/osmandapp/OsmAnd-resources.git resources
+
+      - name: Clone OsmAnd build utilities
+        run: git clone --depth 1 https://github.com/osmandapp/OsmAnd-build.git build
+
+      - name: Apply integration files
+        run: |
+          cp -R OsmAnd/src/net/osmand/plus/googlemaps osmand-source/OsmAnd/src/net/osmand/plus/
+          cp OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java osmand-source/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java
+          mkdir -p osmand-source/docs
+          cp docs/*.md osmand-source/docs/
+
+      - name: Build debug APK
+        working-directory: osmand-source
+        run: ./gradlew :OsmAnd:assembleNightlyFreeLegacyFatDebug --no-daemon --stacktrace
+
+      - name: Locate and publish APK
+        run: |
+          APK=$(find osmand-source/OsmAnd/build/outputs/apk -type f -name '*.apk' | head -n 1)
+          test -n "$APK"
+          cp "$APK" lugnt-debug.apk
+          mkdir -p app/build/outputs/apk/debug
+          cp "$APK" app/build/outputs/apk/debug/lugnt-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lugnt-debug-apk
+          path: lugnt-debug.apk
+          retention-days: 90
+
+      - name: Commit APK to repository when GitHub's 100 MB file limit permits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build/outputs/apk/debug/lugnt-debug.apk
+          if git diff --cached --quiet; then
+            echo "No APK changes to commit."
+          elif [ $(stat -c%s app/build/outputs/apk/debug/lugnt-debug.apk) -ge 104857600 ]; then
+            echo "APK is 100 MB or larger; GitHub will not accept it as a normal repository file. Artifact remains available."
+          else
+            git commit -m "Add latest OsmAnd integration debug APK"
+            git push origin HEAD:main
+          fi
