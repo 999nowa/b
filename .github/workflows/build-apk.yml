@@ -94,10 +94,11 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$GITHUB_WORKSPACE"
-          PLUS="$ROOT/osmand-source/OsmAnd/src/net/osmand/plus"
+          APP="$ROOT/osmand-source/OsmAnd"
+          PLUS="$APP/src/net/osmand/plus"
           SEARCH="$PLUS/search"
           SETTINGS="$PLUS/settings/fragments"
-          RES="$ROOT/osmand-source/OsmAnd/res"
+          RES="$APP/res"
 
           echo '--- top-level workspace ---'
           find "$ROOT" -maxdepth 2 -type d -print | sort
@@ -110,7 +111,7 @@ jobs:
           done
 
           echo '--- required OsmAnd application paths ---'
-          for d in "$PLUS" "$SEARCH" "$SETTINGS" "$RES" "$RES/xml"; do
+          for d in "$APP" "$PLUS" "$SEARCH" "$SETTINGS" "$RES" "$RES/xml" "$PLUS/googlemaps"; do
             test -d "$d"
             echo "DIR  $d"
           done
@@ -118,10 +119,10 @@ jobs:
           echo '--- required upstream files ---'
           for f in \
             "$ROOT/osmand-source/gradlew" \
-            "$ROOT/osmand-source/OsmAnd/build.gradle" \
-            "$ROOT/osmand-source/OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java" \
-            "$ROOT/osmand-source/OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java" \
-            "$ROOT/osmand-source/OsmAnd/res/xml/global_settings.xml" \
+            "$APP/build.gradle" \
+            "$PLUS/search/QuickSearchHelper.java" \
+            "$PLUS/settings/fragments/GlobalSettingsFragment.java" \
+            "$RES/xml/global_settings.xml" \
             "$ROOT/core-legacy/externals/configure.sh"; do
             test -f "$f"
             echo "FILE $f"
@@ -140,15 +141,14 @@ jobs:
             echo "FILE $f"
           done
 
-          echo '--- verify every copy source and destination parent ---'
-          test -d "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps"
-          test -f "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java"
-          test -d "$PLUS/googlemaps"
+          echo '--- verify integration destinations and all source parents ---'
+          test -d "$APP/src/net/osmand/plus/googlemaps"
           test -d "$SEARCH"
           test -d "$SETTINGS"
           test -d "$RES/xml"
+          test -f "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java"
 
-          echo '--- verify Python script is only in integration repo ---'
+          echo '--- verify Python script is only in integration repository ---'
           test -f "$ROOT/patches/enable_google_search.py"
           test ! -e "$ROOT/osmand-source/tools/enable_google_search.py"
           python3 -m py_compile "$ROOT/patches/enable_google_search.py"
@@ -162,14 +162,18 @@ jobs:
           print('Python path audit passed')
           PY
 
-          echo '--- verify no integration source is accidentally taken from upstream ---'
-          test ! -e "$ROOT/osmand-source/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java"
-          test ! -e "$ROOT/osmand-source/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java"
+          echo '--- verify no integration source is accidentally already upstream ---'
+          for f in \
+            "$APP/src/net/osmand/plus/googlemaps/GoogleSearchApi.java" \
+            "$APP/src/net/osmand/plus/search/GoogleSearchSettings.java"; do
+            test ! -e "$f"
+          done
 
           echo '--- Gradle working-directory audit ---'
-          test -x "$ROOT/osmand-source/gradlew" || chmod +x "$ROOT/osmand-source/gradlew"
+          test -f "$ROOT/osmand-source/gradlew"
           test -f "$ROOT/osmand-source/settings.gradle"
           test -d "$ROOT/osmand-source/OsmAnd"
+          chmod +x "$ROOT/osmand-source/gradlew"
           "$ROOT/osmand-source/gradlew" --version
 
       - name: Apply Google integration only after path audit
