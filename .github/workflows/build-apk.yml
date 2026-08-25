@@ -34,115 +34,168 @@ jobs:
           distribution: 'temurin'
           cache: ''
 
-      - name: Show Java and memory
+      - name: Show Java, Python and memory
         run: |
-          set -e
+          set -euo pipefail
           java -version
-          free -h
           python3 --version
+          free -h
 
       - name: Clone exact OsmAnd Nightly base
         run: |
-          set -e
+          set -euo pipefail
           git clone https://github.com/osmandapp/OsmAnd.git osmand-source
           git -C osmand-source checkout --detach "$OSMAND_COMMIT"
           echo "OsmAnd commit: $(git -C osmand-source rev-parse HEAD)"
 
       - name: Clone exact OsmAnd resources
         run: |
-          set -e
+          set -euo pipefail
           git clone https://github.com/osmandapp/OsmAnd-resources.git resources
           git -C resources checkout --detach "$RESOURCES_COMMIT"
           echo "resources commit: $(git -C resources rev-parse HEAD)"
 
       - name: Clone exact OsmAnd build utilities
         run: |
-          set -e
+          set -euo pipefail
           git clone https://github.com/osmandapp/OsmAnd-build.git build
           git -C build checkout --detach "$BUILD_COMMIT"
           echo "build commit: $(git -C build rev-parse HEAD)"
 
       - name: Clone exact OsmAnd core
         run: |
-          set -e
+          set -euo pipefail
           git clone https://github.com/osmandapp/OsmAnd-core.git core
           git -C core checkout --detach "$CORE_COMMIT"
           echo "core commit: $(git -C core rev-parse HEAD)"
 
       - name: Clone exact OsmAnd core legacy
         run: |
-          set -e
+          set -euo pipefail
           git clone https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
           git -C core-legacy checkout --detach "$CORE_LEGACY_COMMIT"
           echo "core-legacy commit: $(git -C core-legacy rev-parse HEAD)"
 
       - name: Clone exact OsmAnd tools
         run: |
-          set -e
+          set -euo pipefail
           git clone https://github.com/osmandapp/OsmAnd-tools.git tools
           git -C tools checkout --detach "$TOOLS_COMMIT"
           echo "tools commit: $(git -C tools rev-parse HEAD)"
 
       - name: Clone exact OsmAnd misc
         run: |
-          set -e
+          set -euo pipefail
           git clone https://github.com/osmandapp/OsmAnd-misc.git misc
           git -C misc checkout --detach "$MISC_COMMIT"
           echo "misc commit: $(git -C misc rev-parse HEAD)"
 
-      - name: Validate complete upstream build workspace
+      - name: Audit exact checkout structure and all integration paths
         run: |
-          set -e
-          test -f osmand-source/gradlew
-          test -d osmand-source/OsmAnd/src/net/osmand/plus
-          test -d osmand-source/OsmAnd/src/net/osmand/plus/search
-          test -f osmand-source/OsmAnd/res/xml/global_settings.xml
-          test -f osmand-source/OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java
-          test -f osmand-source/OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
-          test -f core-legacy/externals/configure.sh
-          test -d core/include
-          test -d tools
-          test -d misc
-          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java
-          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleMapsPreferences.java
-          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchPreferences.java
-          test -f OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java
-          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java
-          test -f OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java
-          test -f patches/enable_google_search.py
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE"
+          PLUS="$ROOT/osmand-source/OsmAnd/src/net/osmand/plus"
+          SEARCH="$PLUS/search"
+          SETTINGS="$PLUS/settings/fragments"
+          RES="$ROOT/osmand-source/OsmAnd/res"
 
-      - name: Preflight integration paths and patch script
-        run: |
-          set -e
-          python3 -m py_compile patches/enable_google_search.py
-          test -d osmand-source/OsmAnd/src/net/osmand/plus/googlemaps
-          test -d osmand-source/OsmAnd/src/net/osmand/plus/search
-          test -d osmand-source/OsmAnd/src/net/osmand/plus/settings/fragments
-          echo "All integration source and destination directories exist."
+          echo '--- top-level workspace ---'
+          find "$ROOT" -maxdepth 2 -type d -print | sort
 
-      - name: Apply Google integration
+          echo '--- required repositories ---'
+          for d in osmand-source resources build core core-legacy tools misc; do
+            test -d "$ROOT/$d"
+            test -d "$ROOT/$d/.git"
+            echo "$d -> $(realpath "$ROOT/$d")"
+          done
+
+          echo '--- required OsmAnd application paths ---'
+          for d in "$PLUS" "$SEARCH" "$SETTINGS" "$RES" "$RES/xml"; do
+            test -d "$d"
+            echo "DIR  $d"
+          done
+
+          echo '--- required upstream files ---'
+          for f in \
+            "$ROOT/osmand-source/gradlew" \
+            "$ROOT/osmand-source/OsmAnd/build.gradle" \
+            "$ROOT/osmand-source/OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java" \
+            "$ROOT/osmand-source/OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java" \
+            "$ROOT/osmand-source/OsmAnd/res/xml/global_settings.xml" \
+            "$ROOT/core-legacy/externals/configure.sh"; do
+            test -f "$f"
+            echo "FILE $f"
+          done
+
+          echo '--- required integration source files in b ---'
+          for f in \
+            "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java" \
+            "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleMapsPreferences.java" \
+            "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchPreferences.java" \
+            "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java" \
+            "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java" \
+            "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" \
+            "$ROOT/patches/enable_google_search.py"; do
+            test -f "$f"
+            echo "FILE $f"
+          done
+
+          echo '--- verify every copy source and destination parent ---'
+          test -d "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps"
+          test -f "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java"
+          test -d "$PLUS/googlemaps"
+          test -d "$SEARCH"
+          test -d "$SETTINGS"
+          test -d "$RES/xml"
+
+          echo '--- verify Python script is only in integration repo ---'
+          test -f "$ROOT/patches/enable_google_search.py"
+          test ! -e "$ROOT/osmand-source/tools/enable_google_search.py"
+          python3 -m py_compile "$ROOT/patches/enable_google_search.py"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('patches/enable_google_search.py').read_text(encoding='utf-8')
+          forbidden = ['osmand-source/tools/enable_google_search.py', 'Path(__file__).parent / "osmand-source"']
+          bad = [x for x in forbidden if x in p]
+          if bad:
+              raise SystemExit('Stale hard-coded integration path(s): ' + ', '.join(bad))
+          print('Python path audit passed')
+          PY
+
+          echo '--- verify no integration source is accidentally taken from upstream ---'
+          test ! -e "$ROOT/osmand-source/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java"
+          test ! -e "$ROOT/osmand-source/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java"
+
+          echo '--- Gradle working-directory audit ---'
+          test -x "$ROOT/osmand-source/gradlew" || chmod +x "$ROOT/osmand-source/gradlew"
+          test -f "$ROOT/osmand-source/settings.gradle"
+          test -d "$ROOT/osmand-source/OsmAnd"
+          "$ROOT/osmand-source/gradlew" --version
+
+      - name: Apply Google integration only after path audit
         run: |
-          set -e
-          SRC="osmand-source/OsmAnd/src/net/osmand/plus"
-          mkdir -p "$SRC/googlemaps"
-          cp -R OsmAnd/src/net/osmand/plus/googlemaps/. "$SRC/googlemaps/"
-          cp OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java "$SRC/search/GoogleSearchSettings.java"
-          python3 patches/enable_google_search.py "$GITHUB_WORKSPACE/osmand-source"
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/osmand-source/OsmAnd/src/net/osmand/plus"
+          cp -R "$GITHUB_WORKSPACE/OsmAnd/src/net/osmand/plus/googlemaps/." "$SRC/googlemaps/"
+          cp "$GITHUB_WORKSPACE/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" "$SRC/search/GoogleSearchSettings.java"
+          python3 "$GITHUB_WORKSPACE/patches/enable_google_search.py" "$GITHUB_WORKSPACE/osmand-source"
 
       - name: Verify Google patch was applied correctly
         working-directory: osmand-source
         run: |
-          set -e
+          set -euo pipefail
           grep -q 'GoogleSearchApi' OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java
           grep -q 'google_maps_api_key' OsmAnd/res/xml/global_settings.xml
           grep -q 'google_search_enabled' OsmAnd/res/xml/global_settings.xml
           grep -q 'GoogleMapsPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
           grep -q 'GoogleSearchPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
+          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java
+          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java
           if grep -R -n 'com.google.android.gms.maps' OsmAnd/src/net/osmand/plus/googlemaps; then
             echo 'ERROR: obsolete Google Maps Android SDK dependency remains in integration sources'
             exit 1
           fi
-          if grep -R -n 'osmand-source/tools/enable_google_search.py' .github patches 2>/dev/null; then
+          if grep -R -n 'osmand-source/tools/enable_google_search.py' ../patches .github 2>/dev/null; then
             echo 'ERROR: stale patch-script destination reference remains'
             exit 1
           fi
@@ -150,13 +203,9 @@ jobs:
       - name: Configure Gradle
         working-directory: osmand-source
         run: |
-          set -e
+          set -euo pipefail
           printf '\norg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8\norg.gradle.daemon=false\n' >> gradle.properties
           ./gradlew --version
-
-      - name: Make Gradle wrapper executable
-        working-directory: osmand-source
-        run: chmod +x gradlew
 
       - name: Run OsmAnd Java tests
         working-directory: osmand-source
@@ -169,9 +218,10 @@ jobs:
       - name: Locate and inspect APK
         working-directory: osmand-source
         run: |
-          set -e
-          APK=$(find OsmAnd/build/outputs/apk -type f -name '*.apk' | head -n 1)
+          set -euo pipefail
+          APK=$(find OsmAnd/build/outputs/apk -type f -name '*.apk' -print -quit)
           test -n "$APK"
+          test -s "$APK"
           echo "APK: $APK"
           mkdir -p ../app/build/outputs/apk/debug
           cp "$APK" ../app/build/outputs/apk/debug/osmand-google-nightly.apk
@@ -188,7 +238,7 @@ jobs:
 
       - name: Commit APK when below GitHub's 100 MB file limit
         run: |
-          set -e
+          set -euo pipefail
           APK=app/build/outputs/apk/debug/osmand-google-nightly.apk
           SIZE=$(stat -c%s "$APK")
           if [ "$SIZE" -ge 104857600 ]; then
