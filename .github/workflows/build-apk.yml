@@ -39,6 +39,7 @@ jobs:
           set -e
           java -version
           free -h
+          python3 --version
 
       - name: Clone exact OsmAnd Nightly base
         run: |
@@ -94,10 +95,30 @@ jobs:
           set -e
           test -f osmand-source/gradlew
           test -d osmand-source/OsmAnd/src/net/osmand/plus
+          test -d osmand-source/OsmAnd/src/net/osmand/plus/search
+          test -f osmand-source/OsmAnd/res/xml/global_settings.xml
+          test -f osmand-source/OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java
+          test -f osmand-source/OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
           test -f core-legacy/externals/configure.sh
           test -d core/include
           test -d tools
           test -d misc
+          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java
+          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleMapsPreferences.java
+          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchPreferences.java
+          test -f OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java
+          test -f OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java
+          test -f OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java
+          test -f patches/enable_google_search.py
+
+      - name: Preflight integration paths and patch script
+        run: |
+          set -e
+          python3 -m py_compile patches/enable_google_search.py
+          test -d osmand-source/OsmAnd/src/net/osmand/plus/googlemaps
+          test -d osmand-source/OsmAnd/src/net/osmand/plus/search
+          test -d osmand-source/OsmAnd/src/net/osmand/plus/settings/fragments
+          echo "All integration source and destination directories exist."
 
       - name: Apply Google integration
         run: |
@@ -106,8 +127,7 @@ jobs:
           mkdir -p "$SRC/googlemaps"
           cp -R OsmAnd/src/net/osmand/plus/googlemaps/. "$SRC/googlemaps/"
           cp OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java "$SRC/search/GoogleSearchSettings.java"
-          cp patches/enable_google_search.py osmand-source/tools/enable_google_search.py
-          python3 osmand-source/tools/enable_google_search.py
+          python3 patches/enable_google_search.py "$GITHUB_WORKSPACE/osmand-source"
 
       - name: Verify Google patch was applied correctly
         working-directory: osmand-source
@@ -117,8 +137,13 @@ jobs:
           grep -q 'google_maps_api_key' OsmAnd/res/xml/global_settings.xml
           grep -q 'google_search_enabled' OsmAnd/res/xml/global_settings.xml
           grep -q 'GoogleMapsPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
+          grep -q 'GoogleSearchPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
           if grep -R -n 'com.google.android.gms.maps' OsmAnd/src/net/osmand/plus/googlemaps; then
             echo 'ERROR: obsolete Google Maps Android SDK dependency remains in integration sources'
+            exit 1
+          fi
+          if grep -R -n 'osmand-source/tools/enable_google_search.py' .github patches 2>/dev/null; then
+            echo 'ERROR: stale patch-script destination reference remains'
             exit 1
           fi
 
