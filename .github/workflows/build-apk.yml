@@ -56,10 +56,16 @@ jobs:
           mkdir -p osmand-source/docs
           cp docs/*.md osmand-source/docs/
 
-      - name: Configure Gradle memory
+      - name: Configure Gradle memory and build settings
         working-directory: osmand-source
         run: |
+          set -e
           printf '\norg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8\norg.gradle.daemon=false\n' >> gradle.properties
+          echo '--- effective gradle.properties memory settings ---'
+          grep -E 'org.gradle.jvmargs|org.gradle.daemon' gradle.properties || true
+          echo '--- JVM environment ---'
+          java -version
+          ./gradlew --version
 
       - name: Make Gradle wrapper executable
         working-directory: osmand-source
@@ -67,7 +73,7 @@ jobs:
 
       - name: Build debug APK
         working-directory: osmand-source
-        run: ./gradlew :OsmAnd:assembleNightlyFreeLegacyFatDebug --no-daemon --stacktrace
+        run: ./gradlew :OsmAnd:assembleNightlyFreeLegacyFatDebug --no-daemon --stacktrace --max-workers=2
 
       - name: Locate and publish APK
         run: |
