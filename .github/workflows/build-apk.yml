@@ -1,4 +1,4 @@
-name: Build OsmAnd with integration
+name: Build OsmAnd~ 5.3.10 with Google integration
 
 on:
   push:
@@ -30,8 +30,8 @@ jobs:
       - name: Show available memory
         run: free -h
 
-      - name: Clone OsmAnd source
-        run: git clone --depth 1 --branch feature/google-maps-satellite https://github.com/999nowa/OsmAnd.git osmand-source
+      - name: Clone OsmAnd 5.3 base
+        run: git clone --depth 1 --branch r5.3 https://github.com/osmandapp/OsmAnd.git osmand-source
 
       - name: Clone OsmAnd resources
         run: git clone --depth 1 https://github.com/osmandapp/OsmAnd-resources.git resources
@@ -45,7 +45,7 @@ jobs:
           test -f osmand-source/gradlew
           test -d osmand-source/OsmAnd/src/net/osmand/plus
 
-      - name: Apply integration files
+      - name: Apply Google integration files
         run: |
           set -e
           SRC="osmand-source/OsmAnd/src/net/osmand/plus"
@@ -53,17 +53,14 @@ jobs:
           cp -R OsmAnd/src/net/osmand/plus/googlemaps/. "$SRC/googlemaps/"
           mkdir -p "$SRC/search"
           cp OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java "$SRC/search/GoogleSearchSettings.java"
-          mkdir -p osmand-source/docs
-          cp docs/*.md osmand-source/docs/
+          cp patches/enable_google_search.py osmand-source/tools/enable_google_search.py
+          python3 osmand-source/tools/enable_google_search.py
 
       - name: Configure Gradle memory and build settings
         working-directory: osmand-source
         run: |
           set -e
           printf '\norg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8\norg.gradle.daemon=false\n' >> gradle.properties
-          echo '--- effective gradle.properties memory settings ---'
-          grep -E 'org.gradle.jvmargs|org.gradle.daemon' gradle.properties || true
-          echo '--- JVM environment ---'
           java -version
           ./gradlew --version
 
@@ -71,7 +68,7 @@ jobs:
         working-directory: osmand-source
         run: chmod +x gradlew
 
-      - name: Build debug APK
+      - name: Build OsmAnd~ 5.3.10 debug APK
         working-directory: osmand-source
         run: ./gradlew :OsmAnd:assembleNightlyFreeLegacyFatDebug --no-daemon --stacktrace --max-workers=2
 
@@ -82,19 +79,19 @@ jobs:
           test -n "$APK"
           echo "Found APK: $APK"
           mkdir -p app/build/outputs/apk/debug
-          cp "$APK" app/build/outputs/apk/debug/lugnt-debug.apk
+          cp "$APK" app/build/outputs/apk/debug/osmand-google-5.3.10.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lugnt-debug-apk
-          path: app/build/outputs/apk/debug/lugnt-debug.apk
+          name: osmand-google-5.3.10-apk
+          path: app/build/outputs/apk/debug/osmand-google-5.3.10.apk
           retention-days: 90
 
       - name: Commit APK when below GitHub's 100 MB file limit
         run: |
           set -e
-          APK=app/build/outputs/apk/debug/lugnt-debug.apk
+          APK=app/build/outputs/apk/debug/osmand-google-5.3.10.apk
           SIZE=$(stat -c%s "$APK")
           if [ "$SIZE" -ge 104857600 ]; then
             echo "APK is ${SIZE} bytes and exceeds GitHub's 100 MB normal-file limit. Artifact is available instead."
@@ -106,6 +103,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No APK changes to commit."
           else
-            git commit -m "Add latest OsmAnd integration debug APK"
+            git commit -m "Add OsmAnd 5.3.10 Google integration APK"
             git push origin HEAD:main
           fi
