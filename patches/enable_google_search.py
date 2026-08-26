@@ -1,9 +1,6 @@
 from pathlib import Path
 import sys
 
-# Usage: python3 patches/enable_google_search.py <OsmAnd checkout>
-# Keep this script in the integration repository. Do not copy it into the
-# upstream OsmAnd checkout.
 if len(sys.argv) != 2:
     raise SystemExit("usage: enable_google_search.py <OsmAnd checkout>")
 
@@ -12,7 +9,6 @@ plus = repo / 'OsmAnd/src/net/osmand/plus'
 if not (plus / 'search').is_dir():
     raise SystemExit(f'Invalid OsmAnd checkout: {plus / "search"} does not exist')
 
-# 1. Register Google Places as an optional OsmAnd search API.
 quick_search = plus / 'search/QuickSearchHelper.java'
 s = quick_search.read_text(encoding='utf-8')
 imp = 'import net.osmand.plus.googlemaps.GoogleSearchApi;\n'
@@ -29,8 +25,6 @@ if 'core.registerAPI(new GoogleSearchApi(app));' not in s:
     s = s.replace(register_anchor, register_line, 1)
 quick_search.write_text(s, encoding='utf-8')
 
-# 2. Add the API-key field and explicit Google-search switch to OsmAnd's
-# existing Global Settings screen.
 global_xml = repo / 'OsmAnd/res/xml/global_settings.xml'
 x = global_xml.read_text(encoding='utf-8')
 xml_marker = '\t<PreferenceCategory\n\t\tandroid:key="other"'
@@ -41,9 +35,10 @@ if 'android:key="google_maps_api_key"' not in x:
     x = x.replace(xml_marker, block + xml_marker, 1)
     global_xml.write_text(x, encoding='utf-8')
 
-# 3. Wire those preferences to our local SharedPreferences stores.
 global_java = plus / 'settings/fragments/GlobalSettingsFragment.java'
 g = global_java.read_text(encoding='utf-8')
+
+# Add imports only if absent.
 import_marker = 'import net.osmand.plus.settings.backend.ApplicationMode;\n'
 imports = ('import net.osmand.plus.googlemaps.GoogleMapsPreferences;\n'
            'import net.osmand.plus.googlemaps.GoogleSearchPreferences;\n')
@@ -52,6 +47,7 @@ if 'import net.osmand.plus.googlemaps.GoogleMapsPreferences;' not in g:
         raise SystemExit('GlobalSettingsFragment import anchor not found')
     g = g.replace(import_marker, import_marker + imports, 1)
 
+# Add constants only if absent.
 const_marker = '\tprivate static final String MEDIA_STORAGE_PREF_ID = "media_storage";\n'
 consts = ('\tprivate static final String GOOGLE_API_KEY_PREF_ID = "google_maps_api_key";\n'
           '\tprivate static final String GOOGLE_SEARCH_PREF_ID = "google_search_enabled";\n')
@@ -60,6 +56,7 @@ if 'GOOGLE_API_KEY_PREF_ID' not in g:
         raise SystemExit('GlobalSettingsFragment constant anchor not found')
     g = g.replace(const_marker, const_marker + consts, 1)
 
+# Add setup calls only if absent.
 setup_marker = '\t\tsetupMediaStoragePref();\n'
 setup_calls = '\t\tsetupGoogleApiKeyPref();\n\t\tsetupGoogleSearchPref();\n'
 if 'setupGoogleApiKeyPref();' not in g:
@@ -67,28 +64,31 @@ if 'setupGoogleApiKeyPref();' not in g:
         raise SystemExit('GlobalSettingsFragment setup anchor not found')
     g = g.replace(setup_marker, setup_marker + setup_calls, 1)
 
-# The callback already exists in upstream OsmAnd. The old version of this
-# integration added a second onPreferenceChange() method, which caused:
-# "onPreferenceChange(Preference, Object) is already defined".
-# Inject our Google handling into the existing callback instead of declaring
-# another callback. This is deliberately idempotent.
-google_callback = '''\t\tif (GOOGLE_API_KEY_PREF_ID.equals(prefId)) {\n\t\t\tif (!(newValue instanceof String)) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tGoogleMapsPreferences.setApiKey(app, (String) newValue);\n\t\t\tsetupGoogleApiKeyPref();\n\t\t\treturn true;\n\t\t} else if (GOOGLE_SEARCH_PREF_ID.equals(prefId)) {\n\t\t\tif (!(newValue instanceof Boolean)) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tGoogleSearchPreferences.setGoogleSearchEnabled(app, (Boolean) newValue);\n\t\t\treturn true;\n\t\t}\n\n'''
-if 'GoogleMapsPreferences.setApiKey(app, (String) newValue);' not in g:
-    callback_marker = '\tpublic boolean onPreferenceChange(Preference preference, Object newValue) {\n\t\tString prefId = preference.getKey();\n'
-    if callback_marker not in g:
-        raise SystemExit('existing onPreferenceChange callback anchor not found')
-    g = g.replace(callback_marker,
-                  '\tpublic boolean onPreferenceChange(Preference preference, Object newValue) {\n\t\tString prefId = preference.getKey();\n\n' + google_callback,
-                  1)
+# Remove any Google callback block that an earlier version may have inserted
+# immediately after the existing callback's prefId assignment. This prevents
+# accidental duplicate callback declarations/logic on repeated CI runs.
+start = g.find('\t\tif (GOOGLE_API_KEY_PREF_ID.equals(prefId)) {')
+if start != -1:
+    end_marker = '\n\t\tif (prefId.equals(SEND_ANONYMOUS_DATA_PREF_ID)) {'
+    end = g.find(end_marker, start)
+    if end != -1:
+        g = g[:start] + g[end + 1:]
 
-# Add the two preference setup helpers. They are intentionally local and use
-# the same Preference classes as the XML, so no new dependencies are needed.
+# Ensure Google handling is inside the one existing callback.
+callback_marker = '\tpublic boolean onPreferenceChange(Preference preference, Object newValue) {\n\t\tString prefId = preference.getKey();\n'
+google_callback = '''\t\tif (GOOGLE_API_KEY_PREF_ID.equals(prefId)) {\n\t\t\tif (!(newValue instanceof String)) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tGoogleMapsPreferences.setApiKey(app, (String) newValue);\n\t\t\tsetupGoogleApiKeyPref();\n\t\t\treturn true;\n\t\t} else if (GOOGLE_SEARCH_PREF_ID.equals(prefId)) {\n\t\t\tif (!(newValue instanceof Boolean)) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tGoogleSearchPreferences.setGoogleSearchEnabled(app, (Boolean) newValue);\n\t\t\treturn true;\n\t\t}\n\n'''
+if callback_marker not in g:
+    raise SystemExit('existing onPreferenceChange callback anchor not found')
+if 'GoogleMapsPreferences.setApiKey(app, (String) newValue);' not in g:
+    g = g.replace(callback_marker, callback_marker + google_callback, 1)
+
+# Add helpers only once.
 setup_helpers_marker = '\tprivate void setupDefaultAppModePref() {'
-setup_helpers = '''\tprivate void setupGoogleApiKeyPref() {\n\t\tandroidx.preference.EditTextPreference preference = findPreference(GOOGLE_API_KEY_PREF_ID);\n\t\tif (preference != null) {\n\t\t\tpreference.setText(GoogleMapsPreferences.getApiKey(app));\n\t\t\tpreference.setSummary(GoogleMapsPreferences.getApiKey(app).isEmpty() ? "Not configured" : "Configured");\n\t\t}\n\t}\n\n\tprivate void setupGoogleSearchPref() {\n\t\tandroidx.preference.SwitchPreferenceCompat preference = findPreference(GOOGLE_SEARCH_PREF_ID);\n\t\tif (preference != null) {\n\t\t\tpreference.setChecked(GoogleSearchPreferences.isGoogleSearchEnabled(app));\n\t\t}\n\t}\n\n'''
+setup_helpers = '''\tprivate void setupGoogleApiKeyPref() {\n\t\tandroidx.preference.EditTextPreference preference = findPreference(GOOGLE_API_KEY_PREF_ID);\n\t\tif (preference != null) {\n\t\t\tString key = GoogleMapsPreferences.getApiKey(app);\n\t\t\tpreference.setText(key);\n\t\t\tpreference.setSummary(key.isEmpty() ? "Not configured" : "Configured");\n\t\t}\n\t}\n\n\tprivate void setupGoogleSearchPref() {\n\t\tandroidx.preference.SwitchPreferenceCompat preference = findPreference(GOOGLE_SEARCH_PREF_ID);\n\t\tif (preference != null) {\n\t\t\tpreference.setChecked(GoogleSearchPreferences.isGoogleSearchEnabled(app));\n\t\t}\n\t}\n\n'''
 if 'private void setupGoogleApiKeyPref()' not in g:
     if setup_helpers_marker not in g:
         raise SystemExit('GlobalSettingsFragment helper insertion anchor not found')
     g = g.replace(setup_helpers_marker, setup_helpers + setup_helpers_marker, 1)
 
 global_java.write_text(g, encoding='utf-8')
-print('Google search registration and Google Maps settings UI patched successfully')
+print('Google integration patch applied successfully')
