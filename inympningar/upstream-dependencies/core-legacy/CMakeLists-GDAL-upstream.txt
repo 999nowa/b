@@ -1,0 +1,5 @@
+This is the exact relevant CMake change from OsmAnd-core-legacy commit befa0be3b973be5b44246dd63ec0871a1ced8411:
+
+add_subdirectory("${OSMAND_CORE_ROOT}/externals/sqlite" "./externals/sqlite")
+add_subdirectory("${OSMAND_CORE_ROOT}/externals/proj" "./externals/proj")
+add_subdirectory("${OSMAND_CORE_ROOT}/externals/gdal" "./externals/gdal")
