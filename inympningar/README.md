@@ -1,6 +1,14 @@
 # Inympningar
 
-This folder contains preserved transplantation material from `999nowa/OsmAnd` for our custom OsmAnd work.
+## Senaste ändring
+
+### 2026-08-26: Bevara relevanta upstream-beroenden från `utgick`
+
+**Vad ändrades:** De tre unika referensdokumenten från `999nowa/utgick` som bedömdes relevanta för framtida rekonstruktion av bygget har bevarats under `inympningar/upstream-dependencies/`.
+
+**Varför:** `core-legacy/CMakeLists-GDAL-upstream.txt`, `core-legacy/README.md` och `build/README.md` innehåller inte den äldre Google-applikationsimplementation som bör ympas in. De dokumenterar däremot upstream Core Legacy/GDAL och beroendet till `OsmAnd-build`.
+
+**Påverkan:** Vi behåller relevant teknisk historik och byggproveniens utan att återinföra föråldrad Google-kod. Inga befintliga aktiva projektfiler har skrivits över och ingen build eller GitHub Actions-workflow har startats.
 
 ## Source
 
@@ -11,6 +19,8 @@ Additional historical branches remain untouched in the source repository and are
 ## What is preserved here
 
 The imported material covers our custom Google Maps integration, Google address search, search-provider selection, API-key preferences, and Google map-tile support.
+
+Relevant upstream dependency references are preserved separately under `upstream-dependencies/`.
 
 ## Why
 
