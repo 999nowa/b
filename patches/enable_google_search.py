@@ -3,8 +3,7 @@ import sys
 
 # Usage: python3 patches/enable_google_search.py <OsmAnd checkout>
 # Keep this script in the integration repository. Do not copy it into the
-# upstream OsmAnd checkout, because the upstream tree is not required to have
-# an application-local tools/ directory.
+# upstream OsmAnd checkout.
 if len(sys.argv) != 2:
     raise SystemExit("usage: enable_google_search.py <OsmAnd checkout>")
 
@@ -68,19 +67,20 @@ if 'setupGoogleApiKeyPref();' not in g:
         raise SystemExit('GlobalSettingsFragment setup anchor not found')
     g = g.replace(setup_marker, setup_marker + setup_calls, 1)
 
-change_marker = '\t\tString prefId = preference.getKey();\n\n\t\tif (prefId.equals(SEND_ANONYMOUS_DATA_PREF_ID)) {'
-change_code = '''\t\tString prefId = preference.getKey();\n\n\t\tif (GOOGLE_API_KEY_PREF_ID.equals(prefId)) {\n\t\t\tGoogleMapsPreferences.setApiKey(app, (String) newValue);\n\t\t\tsetupGoogleApiKeyPref();\n\t\t\treturn true;\n\t\t} else if (GOOGLE_SEARCH_PREF_ID.equals(prefId)) {\n\t\t\tGoogleSearchPreferences.setGoogleSearchEnabled(app, (Boolean) newValue);\n\t\t\treturn true;\n\t\t} else if (prefId.equals(SEND_ANONYMOUS_DATA_PREF_ID)) {'''
-if 'GOOGLE_SEARCH_PREF_ID.equals(prefId)' not in g:
-    if change_marker not in g:
-        raise SystemExit('GlobalSettingsFragment preference-change anchor not found')
-    g = g.replace(change_marker, change_code, 1)
+# The previous patch accidentally inserted the Google preference handling into
+# onDisplayPreferenceDialog(), where newValue does not exist and the callback
+# returns void. Put the handling in the actual Preference.OnPreferenceChange
+# callback inherited from BaseSettingsFragment instead.
+wrong_block = '''\t\tif (GOOGLE_API_KEY_PREF_ID.equals(prefId)) {\n\t\t\tGoogleMapsPreferences.setApiKey(app, (String) newValue);\n\t\t\tsetupGoogleApiKeyPref();\n\t\t\treturn true;\n\t\t} else if (GOOGLE_SEARCH_PREF_ID.equals(prefId)) {\n\t\t\tGoogleSearchPreferences.setGoogleSearchEnabled(app, (Boolean) newValue);\n\t\t\treturn true;\n\t\t} else if (prefId.equals(SEND_ANONYMOUS_DATA_PREF_ID)) {'''
+if wrong_block in g:
+    g = g.replace(wrong_block, '\t\tif (prefId.equals(SEND_ANONYMOUS_DATA_PREF_ID)) {', 1)
 
-method_marker = '\tprivate void setupDefaultAppModePref() {'
-methods = '''\tprivate void setupGoogleApiKeyPref() {\n\t\tandroidx.preference.Preference preference = findPreference(GOOGLE_API_KEY_PREF_ID);\n\t\tif (preference instanceof net.osmand.plus.settings.preferences.EditTextPreferenceEx) {\n\t\t\tnet.osmand.plus.settings.preferences.EditTextPreferenceEx edit =\n\t\t\t\t\t(net.osmand.plus.settings.preferences.EditTextPreferenceEx) preference;\n\t\t\tString key = GoogleMapsPreferences.getApiKey(app);\n\t\t\tedit.setText(key);\n\t\t\tedit.setSummary(key.isEmpty() ? "Not configured" : "Configured");\n\t\t}\n\t}\n\n\tprivate void setupGoogleSearchPref() {\n\t\tandroidx.preference.Preference preference = findPreference(GOOGLE_SEARCH_PREF_ID);\n\t\tif (preference instanceof net.osmand.plus.settings.preferences.SwitchPreferenceEx) {\n\t\t\tnet.osmand.plus.settings.preferences.SwitchPreferenceEx toggle =\n\t\t\t\t\t(net.osmand.plus.settings.preferences.SwitchPreferenceEx) preference;\n\t\t\ttoggle.setChecked(GoogleSearchPreferences.isGoogleSearchEnabled(app));\n\t\t}\n\t}\n\n'''
-if 'private void setupGoogleApiKeyPref()' not in g:
-    if method_marker not in g:
+change_method_marker = '\tprivate void setupDefaultAppModePref() {'
+change_method = '''\t@Override\n\tpublic boolean onPreferenceChange(androidx.preference.Preference preference, Object newValue) {\n\t\tString prefId = preference.getKey();\n\t\tif (GOOGLE_API_KEY_PREF_ID.equals(prefId)) {\n\t\t\tif (!(newValue instanceof String)) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tGoogleMapsPreferences.setApiKey(app, (String) newValue);\n\t\t\tsetupGoogleApiKeyPref();\n\t\t\treturn true;\n\t\t} else if (GOOGLE_SEARCH_PREF_ID.equals(prefId)) {\n\t\t\tif (!(newValue instanceof Boolean)) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tGoogleSearchPreferences.setGoogleSearchEnabled(app, (Boolean) newValue);\n\t\t\treturn true;\n\t\t}\n\t\treturn super.onPreferenceChange(preference, newValue);\n\t}\n\n'''
+if 'public boolean onPreferenceChange(androidx.preference.Preference preference, Object newValue)' not in g:
+    if change_method_marker not in g:
         raise SystemExit('GlobalSettingsFragment method anchor not found')
-    g = g.replace(method_marker, methods + method_marker, 1)
+    g = g.replace(change_method_marker, change_method + change_method_marker, 1)
 
 global_java.write_text(g, encoding='utf-8')
 print('Google search registration and Google Maps settings UI patched successfully')
