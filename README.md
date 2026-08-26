@@ -1,43 +1,21 @@
 # OsmAnd Nightly Google integration
 
-## Latest repository change
+## Exakt build/workflow-kommando
 
-### 2026-08-26: Preserve relevant upstream build dependencies from `utgick`
+Ingen build eller GitHub Actions/workflow startas som en del av denna ändring.
 
-**What changed:** The three unique dependency/reference documents identified in `999nowa/utgick` were preserved under `inympningar/upstream-dependencies/`: the Core Legacy GDAL CMake reference, the Core Legacy dependency documentation, and the OsmAnd-build dependency documentation.
+## Senaste ändring
 
-**Why:** The comparison showed that these materials are not duplicate Google application implementations. They document upstream Core Legacy/GDAL integration and the separate `OsmAnd-build` dependency that may be required when reconstructing the 5.3.10 build environment. Preserving them avoids losing useful build provenance while avoiding transplantation of obsolete application code.
+### #1 | 2026-08-26
 
-**Impact:** `999nowa/b` now retains the relevant material from `utgick` without copying the complete obsolete repository. No existing active project source was overwritten, and no build or GitHub Actions workflow was started by this change.
+**Vad ändrades:** Materialet i `inympningar/` har flyttats till sina avsedda projektplatser. De tre Google Maps pluginfilerna har placerats under `OsmAnd/src/net/osmand/plus/plugins/googlemaps/`. De tre relevanta upstreamreferenserna har placerats under `build/` och `core-legacy/`. De två Googlefiler som redan fanns i `OsmAnd/src/net/osmand/plus/googlemaps/` behölls i sin nuvarande version i stället för att ersättas med äldre stagingkopior.
 
-This repository contains the integration layer and GitHub Actions build automation. The complete OsmAnd source is fetched from the upstream `osmandapp/OsmAnd` `master` branch during the build and the `nightlyFree` flavor is compiled. This is how the upstream project defines its Nightly build.
+**Varför:** `inympningar/` var endast ett tillfälligt stagingområde. Målet är att ha en enda aktiv fil för varje funktion och att inte behålla dubbla filer med samma innehåll eller syfte.
 
-The integration provides:
+**Hur det påverkar projektet:** Den aktiva källstrukturen innehåller nu de relevanta filerna på sina riktiga platser och stagingområdet `inympningar/` är borttaget. Befintliga nyare implementationer i `b` har inte skrivits över av äldre kopior. Ingen build eller GitHub Actions/workflow har startats.
 
-- a Google Maps API key field in OsmAnd Settings > Other > Google Maps
-- an explicit `Use Google for address search` switch, disabled by default
-- a Google Places address-search bridge that publishes results as normal OsmAnd `SearchResult` objects
-- experimental Google satellite integration code
-- JDK 17 GitHub Actions configuration
+Detta repository är det huvudsakliga utvecklingsrepositoriet för den anpassade OsmAndintegrationen.
 
-No Google API key is stored in this repository. The key is entered locally in the installed app.
+## Integration
 
-The workflow records the exact upstream OsmAnd, resources, build-tools and core-legacy commits used for each build.
-
-## Change log
-
-### 2026-08-26: Consolidate transplantation material and retire the old OsmAnd working repository
-
-**What changed:** The `inympningar/` staging area was reviewed against the custom branches of `999nowa/OsmAnd`. The current transplantation material and the files belonging to the `osmand-5.3.10-google-tiles` build path are retained. Superseded standalone Google Maps prototype material and the historical satellite-only duplicate are being removed from `inympningar`.
-
-**Why:** The objective is to make `999nowa/b` the main development repository without carrying forward obsolete implementations that were later replaced. Files that belong to the known 5.3.10 Google Satellite + Google Search build path are retained because they form part of the buildable implementation rather than merely an earlier prototype.
-
-**Impact:** `999nowa/b` remains the active development location. The old `999nowa/OsmAnd` repository is being emptied at its branch heads only after the relevant current and build-used files have been preserved here. Its Git history is not rewritten or deleted, so the old commits remain recoverable as historical records.
-
-### 2026-08-26: OsmAnd custom changes staged for transplantation
-
-**What changed:** A new `inympningar/` area was added containing verified files from `999nowa/OsmAnd` branches that contain our custom Google Maps, address-search, satellite and related integration work.
-
-**Why:** `999nowa/b` is becoming the main OsmAnd development repository, while the previous `999nowa/OsmAnd` repository must remain untouched until the migration has been verified.
-
-**Impact:** The imported files are preserved as transplantation material under `inympningar/`. Existing project files are not replaced by this import, and the original `999nowa/OsmAnd` repository remains available as the source and historical backup.
+Projektet innehåller integration för Google Maps API, Google adressökning, sökproviderinställningar och Google kartrelaterad funktionalitet. Ingen Google API-nyckel lagras i repositoriet.
