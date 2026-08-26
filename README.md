@@ -1,5 +1,15 @@
 # OsmAnd Nightly Google integration
 
+## Latest repository change
+
+### 2026-08-26: Preserve relevant upstream build dependencies from `utgick`
+
+**What changed:** The three unique dependency/reference documents identified in `999nowa/utgick` were preserved under `inympningar/upstream-dependencies/`: the Core Legacy GDAL CMake reference, the Core Legacy dependency documentation, and the OsmAnd-build dependency documentation.
+
+**Why:** The comparison showed that these materials are not duplicate Google application implementations. They document upstream Core Legacy/GDAL integration and the separate `OsmAnd-build` dependency that may be required when reconstructing the 5.3.10 build environment. Preserving them avoids losing useful build provenance while avoiding transplantation of obsolete application code.
+
+**Impact:** `999nowa/b` now retains the relevant material from `utgick` without copying the complete obsolete repository. No existing active project source was overwritten, and no build or GitHub Actions workflow was started by this change.
+
 This repository contains the integration layer and GitHub Actions build automation. The complete OsmAnd source is fetched from the upstream `osmandapp/OsmAnd` `master` branch during the build and the `nightlyFree` flavor is compiled. This is how the upstream project defines its Nightly build.
 
 The integration provides:
