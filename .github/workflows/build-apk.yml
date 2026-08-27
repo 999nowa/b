@@ -1,4 +1,4 @@
-name: Build OsmAnd Nightly with Google integration
+name: Build OsmAnd 531003 with Google integration
 
 on:
   workflow_dispatch:
@@ -9,18 +9,13 @@ permissions:
 env:
   GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
   JAVA_TOOL_OPTIONS: "-Xmx6g -XX:MaxMetaspaceSize=1g"
-  OSMAND_COMMIT: "55c111894e88cb7049dd796cc16b3c65fca24693"
-  RESOURCES_COMMIT: "b22e0dfa8b3dbb2bb1c7449062041461033a2739"
-  BUILD_COMMIT: "54356f2a6d1d07fe67510a25ec7912c0c63b277d"
-  CORE_COMMIT: "b67c66154a4fdf09fc84614e3e283d677869329f"
-  CORE_LEGACY_COMMIT: "caedfeac444670f74ea480ebc33083e8b65daf6e"
-  TOOLS_COMMIT: "ebbc3211805d8d66a80663f97e5da6f894ed26e5"
-  MISC_COMMIT: "fa7b6f3c9d4df0007a82f9f575eb1028b8acd52a"
+  OSMAND_531003_REPO: "999nowa/net.osmand.plus_531003_src.tar.gz"
+  OSMAND_531003_COMMIT: "db7ea927bc56cd3f6863040ce54c2891dc1f9f2d"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - name: Checkout integration repository
         uses: actions/checkout@v4
@@ -38,173 +33,109 @@ jobs:
           java -version
           python3 --version
           free -h
+          df -h .
 
-      - name: Clone exact OsmAnd Nightly base
+      - name: Checkout exact OsmAnd 531003 source
         run: |
           set -euo pipefail
-          git clone https://github.com/osmandapp/OsmAnd.git osmand-source
-          git -C osmand-source checkout --detach "$OSMAND_COMMIT"
-          echo "OsmAnd commit: $(git -C osmand-source rev-parse HEAD)"
+          git clone --recursive "https://github.com/${OSMAND_531003_REPO}.git" osmand-531003
+          git -C osmand-531003 checkout --detach "$OSMAND_531003_COMMIT"
+          git -C osmand-531003 submodule sync --recursive
+          git -C osmand-531003 submodule update --init --recursive
+          echo "531003 commit: $(git -C osmand-531003 rev-parse HEAD)"
+          test "$(git -C osmand-531003 rev-parse HEAD)" = "$OSMAND_531003_COMMIT"
+          test -f osmand-531003/android/settings.gradle
+          test -f osmand-531003/android/OsmAnd/build.gradle
+          test -f osmand-531003/build.sh
+          test -f osmand-531003/prebuild.sh
 
-      - name: Clone exact OsmAnd resources
+      - name: Prepare 531003 build dependencies
+        working-directory: osmand-531003
         run: |
           set -euo pipefail
-          git clone https://github.com/osmandapp/OsmAnd-resources.git resources
-          git -C resources checkout --detach "$RESOURCES_COMMIT"
-          echo "resources commit: $(git -C resources rev-parse HEAD)"
+          chmod +x build.sh prebuild.sh
+          ./prebuild.sh
 
-      - name: Clone exact OsmAnd build utilities
-        run: |
-          set -euo pipefail
-          # The integration repository contains a documentation directory named
-          # "build". OsmAnd's build utilities must nevertheless live at the
-          # workspace path "build", because the upstream Gradle/CMake setup
-          # expects that relative path. Preserve the integration documentation
-          # elsewhere for the duration of this workspace.
-          if [ -d build ] && [ ! -d build/.git ]; then
-            mv build .integration-build-docs
-          fi
-          test ! -e build
-          git clone https://github.com/osmandapp/OsmAnd-build.git build
-          git -C build checkout --detach "$BUILD_COMMIT"
-          echo "build commit: $(git -C build rev-parse HEAD)"
-
-      - name: Clone exact OsmAnd core
-        run: |
-          set -euo pipefail
-          git clone https://github.com/osmandapp/OsmAnd-core.git core
-          git -C core checkout --detach "$CORE_COMMIT"
-          echo "core commit: $(git -C core rev-parse HEAD)"
-
-      - name: Clone exact OsmAnd core legacy
-        run: |
-          set -euo pipefail
-          git clone https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy
-          git -C core-legacy checkout --detach "$CORE_LEGACY_COMMIT"
-          echo "core-legacy commit: $(git -C core-legacy rev-parse HEAD)"
-
-      - name: Clone exact OsmAnd tools
-        run: |
-          set -euo pipefail
-          git clone https://github.com/osmandapp/OsmAnd-tools.git tools
-          git -C tools checkout --detach "$TOOLS_COMMIT"
-          echo "tools commit: $(git -C tools rev-parse HEAD)"
-
-      - name: Clone exact OsmAnd misc
-        run: |
-          set -euo pipefail
-          git clone https://github.com/osmandapp/OsmAnd-misc.git misc
-          git -C misc checkout --detach "$MISC_COMMIT"
-          echo "misc commit: $(git -C misc rev-parse HEAD)"
-
-      - name: Pre-patch workspace and path audit
+      - name: Audit 531003 source before integration
         run: |
           set -euo pipefail
           ROOT="$GITHUB_WORKSPACE"
-          APP="$ROOT/osmand-source/OsmAnd"
-          PLUS="$APP/src/net/osmand/plus"
-          SEARCH="$PLUS/search"
-          SETTINGS="$PLUS/settings/fragments"
-          RES="$APP/res"
-          echo '--- workspace ---'
-          find "$ROOT" -maxdepth 2 -type d -print | sort
-          echo '--- repositories ---'
-          for d in osmand-source resources build core core-legacy tools misc; do
-            test -d "$ROOT/$d/.git"
-            echo "$d -> $(realpath "$ROOT/$d")"
-          done
-          echo '--- original OsmAnd paths ---'
-          for d in "$APP" "$PLUS" "$SEARCH" "$SETTINGS" "$RES" "$RES/xml"; do test -d "$d"; done
-          for f in "$ROOT/osmand-source/gradlew" "$APP/build.gradle" "$ROOT/osmand-source/settings.gradle" "$PLUS/search/QuickSearchHelper.java" "$PLUS/settings/fragments/GlobalSettingsFragment.java" "$RES/xml/global_settings.xml"; do test -f "$f"; done
-          echo '--- integration inputs in b ---'
+          SRC="$ROOT/osmand-531003/android/OsmAnd"
+          PLUS="$SRC/src/net/osmand/plus"
+          for f in \
+            "$ROOT/osmand-531003/android/gradlew" \
+            "$ROOT/osmand-531003/android/settings.gradle" \
+            "$SRC/build.gradle" \
+            "$PLUS/search/QuickSearchHelper.java" \
+            "$PLUS/settings/fragments/GlobalSettingsFragment.java" \
+            "$SRC/res/xml/global_settings.xml" \
+            "$PLUS/activities/MapActivity.java"; do test -f "$f"; done
+          echo '--- 531003 version ---'
+          grep -nE 'versionCode|versionName' "$SRC/build.gradle" | head -10
+          echo '--- integration files in b ---'
           for f in \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleMapsPreferences.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchPreferences.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java" \
+            "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleAddressSearchClient.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/addressocr/AddressOcrRouteActivity.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/addressocr/AddressOcrRouteLauncher.java" \
             "$ROOT/patches/enable_google_search.py"; do test -f "$f"; done
-          echo '--- pre-patch Google destinations must NOT exist ---'
-          test ! -e "$PLUS/googlemaps"
-          test ! -e "$SEARCH/GoogleSearchSettings.java"
-          test ! -e "$PLUS/addressocr"
-          test ! -e "$ROOT/osmand-source/tools/enable_google_search.py"
           python3 -m py_compile "$ROOT/patches/enable_google_search.py"
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('patches/enable_google_search.py').read_text(encoding='utf-8')
-          forbidden = ['osmand-source/tools/enable_google_search.py', 'Path(__file__).parent / "osmand-source"']
-          bad = [x for x in forbidden if x in p]
-          if bad:
-              raise SystemExit('Stale hard-coded integration path(s): ' + ', '.join(bad))
-          print('Python path audit passed')
-          PY
-          echo '--- Gradle path audit ---'
-          chmod +x "$ROOT/osmand-source/gradlew"
-          test -f "$ROOT/osmand-source/gradlew"
-          (cd "$ROOT/osmand-source" && ./gradlew --version)
-          echo 'PRE-PATCH AUDIT PASSED'
 
-      - name: Apply Google and address OCR integration
+      - name: Apply Google and OCR integration to fixed 531003 base
         run: |
           set -euo pipefail
           ROOT="$GITHUB_WORKSPACE"
-          APP="$ROOT/osmand-source/OsmAnd"
-          mkdir -p "$APP/src/net/osmand/plus/googlemaps"
-          cp -R "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/." "$APP/src/net/osmand/plus/googlemaps/"
-          cp "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" "$APP/src/net/osmand/plus/search/GoogleSearchSettings.java"
-          python3 "$ROOT/patches/enable_google_search.py" "$ROOT/osmand-source"
+          SRC="$ROOT/osmand-531003/android/OsmAnd"
+          mkdir -p "$SRC/src/net/osmand/plus/googlemaps"
+          cp -R "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/." "$SRC/src/net/osmand/plus/googlemaps/"
+          cp "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" "$SRC/src/net/osmand/plus/search/GoogleSearchSettings.java"
+          python3 "$ROOT/patches/enable_google_search.py" "$ROOT/osmand-531003"
 
-      - name: Post-patch audit
-        working-directory: osmand-source
+      - name: Verify integration against 531003
         run: |
           set -euo pipefail
-          test -d OsmAnd/src/net/osmand/plus/googlemaps
-          test -d OsmAnd/src/net/osmand/plus/addressocr
-          for f in \
-            OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java \
-            OsmAnd/src/net/osmand/plus/googlemaps/GoogleMapsPreferences.java \
-            OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchPreferences.java \
-            OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java \
-            OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java \
-            OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java \
-            OsmAnd/src/net/osmand/plus/addressocr/AddressOcrRouteActivity.java \
-            OsmAnd/src/net/osmand/plus/addressocr/AddressOcrRouteLauncher.java; do test -f "$f"; done
-          grep -q 'GoogleSearchApi' OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java
-          grep -q 'google_maps_api_key' OsmAnd/res/xml/global_settings.xml
-          grep -q 'google_search_enabled' OsmAnd/res/xml/global_settings.xml
-          grep -q 'GoogleMapsPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
-          grep -q 'GoogleSearchPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
-          grep -q 'AddressOcrRouteLauncher.install(this);' OsmAnd/src/net/osmand/plus/activities/MapActivity.java
-          grep -q 'AddressOcrRouteActivity' OsmAnd/AndroidManifest.xml
-          grep -q "com.google.mlkit:text-recognition:16.0.1" OsmAnd/build.gradle
-          if grep -R -n 'com.google.android.gms.maps' OsmAnd/src/net/osmand/plus/googlemaps; then exit 1; fi
-          echo 'POST-PATCH AUDIT PASSED'
+          ROOT="$GITHUB_WORKSPACE"
+          SRC="$ROOT/osmand-531003/android/OsmAnd"
+          PLUS="$SRC/src/net/osmand/plus"
+          test -d "$PLUS/googlemaps"
+          test -d "$PLUS/addressocr"
+          grep -q 'GoogleSearchApi' "$PLUS/search/QuickSearchHelper.java"
+          grep -q 'google_maps_api_key' "$SRC/res/xml/global_settings.xml"
+          grep -q 'google_search_enabled' "$SRC/res/xml/global_settings.xml"
+          grep -q 'GoogleMapsPreferences' "$PLUS/settings/fragments/GlobalSettingsFragment.java"
+          grep -q 'GoogleSearchPreferences' "$PLUS/settings/fragments/GlobalSettingsFragment.java"
+          grep -q 'AddressOcrRouteLauncher.install(this);' "$PLUS/activities/MapActivity.java"
+          grep -q 'AddressOcrRouteActivity' "$SRC/AndroidManifest.xml"
+          grep -q 'com.google.mlkit:text-recognition:16.0.1' "$SRC/build.gradle"
+          echo '531003 integration audit passed'
 
       - name: Run OsmAnd Java tests
-        working-directory: osmand-source
+        working-directory: osmand-531003/android
         run: ./gradlew :OsmAnd-java:test --no-daemon --stacktrace --max-workers=2
 
-      - name: Build OsmAnd Nightly debug APK
-        working-directory: osmand-source
+      - name: Build OsmAnd 531003 Nightly debug APK
+        working-directory: osmand-531003/android
         run: ./gradlew assembleNightlyFreeLegacyFatDebug --no-daemon --stacktrace --max-workers=2
 
       - name: Locate and inspect APK
-        working-directory: osmand-source
+        working-directory: osmand-531003/android
         run: |
           set -euo pipefail
           APK=$(find OsmAnd/build/outputs/apk -type f -name '*.apk' -print -quit)
-          test -n "$APK" && test -s "$APK"
-          mkdir -p ../app/build/outputs/apk/debug
-          cp "$APK" ../app/build/outputs/apk/debug/osmand-google-nightly.apk
+          test -n "$APK"
+          test -s "$APK"
+          mkdir -p "$GITHUB_WORKSPACE/app/build/outputs/apk/debug"
+          cp "$APK" "$GITHUB_WORKSPACE/app/build/outputs/apk/debug/osmand-531003-google-ocr.apk"
           echo "APK: $APK"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: osmand-google-nightly-apk
-          path: app/build/outputs/apk/debug/osmand-google-nightly.apk
+          name: osmand-531003-google-ocr-apk
+          path: app/build/outputs/apk/debug/osmand-531003-google-ocr.apk
           retention-days: 90
