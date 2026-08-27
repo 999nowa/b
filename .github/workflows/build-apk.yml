@@ -1,8 +1,6 @@
 name: Build OsmAnd Nightly with Google integration
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -117,10 +115,13 @@ jobs:
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java" \
             "$ROOT/OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java" \
+            "$ROOT/OsmAnd/src/net/osmand/plus/addressocr/AddressOcrRouteActivity.java" \
+            "$ROOT/OsmAnd/src/net/osmand/plus/addressocr/AddressOcrRouteLauncher.java" \
             "$ROOT/patches/enable_google_search.py"; do test -f "$f"; done
           echo '--- pre-patch Google destinations must NOT exist ---'
           test ! -e "$PLUS/googlemaps"
           test ! -e "$SEARCH/GoogleSearchSettings.java"
+          test ! -e "$PLUS/addressocr"
           test ! -e "$ROOT/osmand-source/tools/enable_google_search.py"
           python3 -m py_compile "$ROOT/patches/enable_google_search.py"
           python3 - <<'PY'
@@ -138,7 +139,7 @@ jobs:
           (cd "$ROOT/osmand-source" && ./gradlew --version)
           echo 'PRE-PATCH AUDIT PASSED'
 
-      - name: Apply Google integration after pre-patch audit
+      - name: Apply Google and address OCR integration
         run: |
           set -euo pipefail
           ROOT="$GITHUB_WORKSPACE"
@@ -153,18 +154,24 @@ jobs:
         run: |
           set -euo pipefail
           test -d OsmAnd/src/net/osmand/plus/googlemaps
+          test -d OsmAnd/src/net/osmand/plus/addressocr
           for f in \
             OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchApi.java \
             OsmAnd/src/net/osmand/plus/googlemaps/GoogleMapsPreferences.java \
             OsmAnd/src/net/osmand/plus/googlemaps/GoogleSearchPreferences.java \
             OsmAnd/src/net/osmand/plus/googlemaps/GooglePlacesSearchProvider.java \
             OsmAnd/src/net/osmand/plus/googlemaps/GoogleSatelliteMapController.java \
-            OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java; do test -f "$f"; done
+            OsmAnd/src/net/osmand/plus/search/GoogleSearchSettings.java \
+            OsmAnd/src/net/osmand/plus/addressocr/AddressOcrRouteActivity.java \
+            OsmAnd/src/net/osmand/plus/addressocr/AddressOcrRouteLauncher.java; do test -f "$f"; done
           grep -q 'GoogleSearchApi' OsmAnd/src/net/osmand/plus/search/QuickSearchHelper.java
           grep -q 'google_maps_api_key' OsmAnd/res/xml/global_settings.xml
           grep -q 'google_search_enabled' OsmAnd/res/xml/global_settings.xml
           grep -q 'GoogleMapsPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
           grep -q 'GoogleSearchPreferences' OsmAnd/src/net/osmand/plus/settings/fragments/GlobalSettingsFragment.java
+          grep -q 'AddressOcrRouteLauncher.install(this);' OsmAnd/src/net/osmand/plus/activities/MapActivity.java
+          grep -q 'AddressOcrRouteActivity' OsmAnd/AndroidManifest.xml
+          grep -q "com.google.mlkit:text-recognition:16.0.1" OsmAnd/build.gradle
           if grep -R -n 'com.google.android.gms.maps' OsmAnd/src/net/osmand/plus/googlemaps; then exit 1; fi
           echo 'POST-PATCH AUDIT PASSED'
 
