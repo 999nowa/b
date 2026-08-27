@@ -56,9 +56,18 @@ jobs:
       - name: Clone exact OsmAnd build utilities
         run: |
           set -euo pipefail
-          git clone https://github.com/osmandapp/OsmAnd-build.git osmand-build
-          git -C osmand-build checkout --detach "$BUILD_COMMIT"
-          echo "build commit: $(git -C osmand-build rev-parse HEAD)"
+          # The integration repository contains a documentation directory named
+          # "build". OsmAnd's build utilities must nevertheless live at the
+          # workspace path "build", because the upstream Gradle/CMake setup
+          # expects that relative path. Preserve the integration documentation
+          # elsewhere for the duration of this workspace.
+          if [ -d build ] && [ ! -d build/.git ]; then
+            mv build .integration-build-docs
+          fi
+          test ! -e build
+          git clone https://github.com/osmandapp/OsmAnd-build.git build
+          git -C build checkout --detach "$BUILD_COMMIT"
+          echo "build commit: $(git -C build rev-parse HEAD)"
 
       - name: Clone exact OsmAnd core
         run: |
@@ -100,7 +109,7 @@ jobs:
           echo '--- workspace ---'
           find "$ROOT" -maxdepth 2 -type d -print | sort
           echo '--- repositories ---'
-          for d in osmand-source resources osmand-build core core-legacy tools misc; do
+          for d in osmand-source resources build core core-legacy tools misc; do
             test -d "$ROOT/$d/.git"
             echo "$d -> $(realpath "$ROOT/$d")"
           done
