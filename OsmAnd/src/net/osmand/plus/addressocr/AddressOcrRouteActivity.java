@@ -172,7 +172,11 @@ public class AddressOcrRouteActivity extends Activity {
         if (!resolved.isEmpty()) {
             TargetPointsHelper helper = app.getTargetPointsHelper();
             List<TargetPoint> all = new ArrayList<>(helper.getAllPoints());
-            all.addAll(resolved);
+            if (helper.getPointToNavigate() != null && !all.isEmpty()) {
+                all.addAll(all.size() - 1, resolved);
+            } else {
+                all.addAll(resolved);
+            }
             helper.reorderAllTargetPoints(all, true);
         }
 
