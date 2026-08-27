@@ -56,9 +56,9 @@ jobs:
       - name: Clone exact OsmAnd build utilities
         run: |
           set -euo pipefail
-          git clone https://github.com/osmandapp/OsmAnd-build.git build
-          git -C build checkout --detach "$BUILD_COMMIT"
-          echo "build commit: $(git -C build rev-parse HEAD)"
+          git clone https://github.com/osmandapp/OsmAnd-build.git osmand-build
+          git -C osmand-build checkout --detach "$BUILD_COMMIT"
+          echo "build commit: $(git -C osmand-build rev-parse HEAD)"
 
       - name: Clone exact OsmAnd core
         run: |
@@ -100,7 +100,7 @@ jobs:
           echo '--- workspace ---'
           find "$ROOT" -maxdepth 2 -type d -print | sort
           echo '--- repositories ---'
-          for d in osmand-source resources build core core-legacy tools misc; do
+          for d in osmand-source resources osmand-build core core-legacy tools misc; do
             test -d "$ROOT/$d/.git"
             echo "$d -> $(realpath "$ROOT/$d")"
           done
